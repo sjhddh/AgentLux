@@ -5,6 +5,13 @@ async function analyzeComposition(imageBase64, width, height) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("OPENAI_API_KEY required for vision analysis.");
 
+    const prompt = `You are a master photographer in the tradition of Henri Cartier-Bresson, shooting with a 35mm Leica. You possess absolute mastery over dynamic symmetry, the golden ratio, leading lines, and 'The Decisive Moment'. 
+Analyze this image (original size: ${width}x${height}). 
+Determine the primary subject and calculate the absolute mathematically perfect photographic crop to elevate this image to a magnum opus. 
+Return ONLY a JSON object representing the optimal crop box. 
+Ensure x+width <= ${width} and y+height <= ${height}. 
+Format: {"x": int, "y": int, "width": int, "height": int, "rule": "string explaining the compositional choice, e.g. 'Golden Spiral alignment on the subject's gaze'"}`;
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -13,7 +20,7 @@ async function analyzeComposition(imageBase64, width, height) {
             messages: [{
                 role: "user",
                 content: [
-                    { type: "text", text: `You are a master photographer. Analyze this image (original size: ${width}x${height}). Determine the primary subject and the absolute best photographic composition (e.g., Rule of Thirds, Golden Ratio, Lead Room). Return ONLY a JSON object for the optimal crop box. Ensure x+width <= ${width} and y+height <= ${height}. Format: {"x": int, "y": int, "width": int, "height": int, "rule": "string explaining the compositional choice"}` },
+                    { type: "text", text: prompt },
                     { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
                 ]
             }],
@@ -38,7 +45,7 @@ async function execute({ image_path, delete_after = true }) {
         
         // 2. Zero-Retention Memory Management: Purge original from disk immediately
         if (delete_after) {
-            await fs.unlink(image_path).catch(e => console.warn("[Master-Crop] Could not delete original file:", e.message));
+            await fs.unlink(image_path).catch(e => console.warn("[AgentLux] Could not delete original file:", e.message));
         }
 
         // 3. VLM Analysis
@@ -68,8 +75,8 @@ async function execute({ image_path, delete_after = true }) {
 }
 
 module.exports = {
-    name: "master_crop",
-    description: "Re-compose an image to master-level photography standards using VLM and sharp. Implements zero-retention memory management (input deleted, output streamed).",
+    name: "agentlux_compose",
+    description: "Re-compose an image to Leica/Bresson master-level standards using VLM and sharp. Implements zero-retention memory management.",
     parameters: {
         type: "object",
         properties: {

@@ -1,5 +1,5 @@
 {
-  "name": "master-crop",
+  "name": "agentlux",
   "version": "1.0.0",
   "description": "Agent-Native image composition skill with zero-retention memory management.",
   "main": "index.js",
