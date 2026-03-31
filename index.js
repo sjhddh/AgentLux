@@ -1,6 +1,46 @@
 const fs = require('fs').promises;
 const sharp = require('sharp');
 
+function applyLeicaM10Color(sharpInstance, width, height) {
+    // 1. Leica M10 Color Science (Recomb Matrix)
+    // - Boost Reds, slightly desaturate Greens, warm up the Midtones
+    // [R, G, B]
+    const leicaMatrix = [
+        [1.1, -0.05, -0.05], // R
+        [0.0, 0.9, 0.1],     // G
+        [0.0, 0.0, 1.05]     // B
+    ];
+
+    // 2. Optical Vignetting (Simulating a 35mm Summilux f/1.4 wide open)
+    // Create an SVG radial gradient matching the crop dimensions
+    const cx = width / 2;
+    const cy = height / 2;
+    const r = Math.max(width, height) / 1.5;
+    const vignetteSvg = `<svg width="${width}" height="${height}">
+        <defs>
+            <radialGradient id="vignette" cx="50%" cy="50%" r="75%">
+                <stop offset="50%" stop-color="black" stop-opacity="0" />
+                <stop offset="100%" stop-color="black" stop-opacity="0.4" />
+            </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="${width}" height="${height}" fill="url(#vignette)" />
+    </svg>`;
+
+    // 3. Contrast & Saturation (Micro-contrast punch, slightly muted saturation for filmic look)
+    return sharpInstance
+        .recomb(leicaMatrix) // Color shift
+        .modulate({
+            saturation: 0.9, // Slightly desaturated
+            brightness: 1.02 // Slight bump to offset matrix darkening
+        })
+        .linear(1.15, -(0.05 * 255)) // S-curve contrast boost (slope 1.15, intercept shift to crush blacks slightly)
+        .composite([{
+            input: Buffer.from(vignetteSvg),
+            blend: 'multiply'
+        }]);
+}
+
+
 async function analyzeComposition(imageBase64, width, height) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("OPENAI_API_KEY required for vision analysis.");
@@ -58,9 +98,12 @@ async function execute({ image_path, delete_after = true }) {
         cropBox.height = Math.min(Math.floor(cropBox.height), metadata.height - cropBox.y);
 
         // 5. Transformation Engine (Lossless crop)
-        const croppedBuffer = await sharp(buffer)
-            .extract({ left: cropBox.x, top: cropBox.y, width: cropBox.width, height: cropBox.height })
-            .toBuffer();
+        // 5. Transformation Engine (Lossless crop + Leica Color Science)
+        let croppedSharp = sharp(buffer)
+            .extract({ left: cropBox.x, top: cropBox.y, width: cropBox.width, height: cropBox.height });
+        
+        croppedSharp = applyLeicaM10Color(croppedSharp, cropBox.width, cropBox.height);
+        const croppedBuffer = await croppedSharp.withMetadata().toBuffer();
 
         // 6. Return Data URI (No disk footprint for the output either)
         return {
