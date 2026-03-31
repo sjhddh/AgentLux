@@ -1,14 +1,30 @@
 {
   "name": "agentlux",
-  "version": "1.0.0",
-  "description": "Agent-Native image composition skill with zero-retention memory management.",
+  "version": "1.0.1",
+  "description": "Zero-retention AgentSkill bringing the Leica 35mm aesthetic and Henri Cartier-Bresson's geometry to autonomous vision models.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["openclaw", "agentskill", "vision", "photography"],
-  "author": "sjhddh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sjhddh/AgentLux.git"
+  },
+  "keywords": [
+    "openclaw",
+    "agentskill",
+    "vision",
+    "photography",
+    "leica",
+    "composition",
+    "zero-retention"
+  ],
+  "author": "sjhddh <jhao.sun@gmail.com>",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/sjhddh/AgentLux/issues"
+  },
+  "homepage": "https://github.com/sjhddh/AgentLux#readme",
   "dependencies": {
     "sharp": "^0.33.2"
   }
