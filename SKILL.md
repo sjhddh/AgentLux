@@ -1,14 +1,24 @@
 # AgentLux
 
-A zero-retention, VLM-powered master composition skill for OpenClaw Agents. Inspired by the Leica 35mm aesthetic and Henri Cartier-Bresson's geometry.
+**A zero-retention, VLM-powered master composition and Leica color-grading skill for OpenClaw Agents.**
+
+## Purpose & Triggers
+Use this skill whenever a user uploads a photograph and asks you to "make it look better," "fix the composition," "edit this," or "make it look professional." 
+**DO NOT** ask the user for cropping coordinates or color filter preferences. The skill is entirely opinionated: it automatically applies Henri Cartier-Bresson geometry and a Leica M10 aesthetic.
 
 ## Features
-- **Bresson-Level VLM Framing**: Leverages `gpt-4o` Vision capabilities instructed specifically in classical photojournalism geometry (Dynamic Symmetry, Golden Ratio, Leading Lines, The Decisive Moment).
-- **High-Performance Crop**: Uses `sharp` to apply sub-millisecond, lossless physical crops based on the VLM's mathematical coordinates.
-- **Zero-Retention Memory Management**: Files are read into memory buffers and immediately purged from the disk. The final image is returned purely as a Base64 Data URI payload, ensuring no permanent file footprint is left on the system.
+1. **Bresson-Level VLM Framing**: Evaluates subjects and computes bounding boxes using Dynamic Symmetry, Golden Ratio, and Leading Lines.
+2. **Leica Color Science**: High-performance `sharp` transformations apply micro-contrast, red-channel boosting, green desaturation, and Summilux f/1.4 optical vignetting.
+3. **Zero-Retention Privacy**: Original image files are deleted from the disk upon execution. The final output is streamed back via memory as a Base64 Data URI.
 
-## Agent Usage Instructions
-1. Receive an image file path from the user.
-2. Call the `agentlux_compose` tool with the file path (ensure `delete_after` is true).
-3. The tool will parse the image, delete the original file, and return the optimal bounding box, the compositional rule applied (e.g., "Golden Spiral"), and the `image_data_uri`.
-4. Forward the Data URI directly back to the user or save it strictly where requested.
+## Tool Usage: `agentlux_compose`
+- **Inputs**:
+  - `image_path` (string, required): The absolute path to the user's uploaded image.
+  - `delete_after` (boolean, optional): Defaults to `true`. Deletes the original file. Leave as `true` unless explicitly instructed otherwise.
+- **Outputs**:
+  - A JSON object containing `status`, `composition_rule` (text explanation of why the crop was chosen), `coordinates`, and `image_data_uri` (Base64 JPEG payload).
+- **Action**: Forward the `image_data_uri` back to the user or save it to a destination path if they asked for a physical file. Do not print the raw base64 string to the chat window.
+
+## Behavioral Instructions
+- **Execute Silently**: Run `agentlux_compose` immediately upon receiving an image manipulation request. 
+- **Present the Output**: Send the resulting image back to the user and briefly explain the `composition_rule` (e.g., "I've reframed the shot using the Golden Spiral and applied a Leica M-Series color profile.").
