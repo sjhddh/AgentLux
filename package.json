@@ -1,6 +1,6 @@
 {
   "name": "agentlux",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Zero-retention AgentSkill bringing the Leica 35mm aesthetic and Henri Cartier-Bresson's geometry to autonomous vision models.",
   "main": "index.js",
   "scripts": {
