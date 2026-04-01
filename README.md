@@ -74,6 +74,7 @@ const agentlux = require('agentlux');
 const result = await agentlux.execute({
     image_path: '/tmp/photo.jpg',           // absolute path to input
     output_path: '/tmp/agentlux_out.jpg',   // where to write the output JPEG
+    language: 'zh',                          // match your conversation language
     delete_after: true                       // zero-retention: delete input after loading
 });
 
@@ -92,6 +93,7 @@ if (result.status === 'success') {
 | `image_path` | `string` | — | Absolute path to a single input image. Required unless `image_paths` is used. |
 | `image_paths` | `string[]` | — | Absolute paths for burst mode. Mutually exclusive with `image_path`. |
 | `output_path` | `string` | — | Absolute path to write output JPEG. If omitted, output is returned as `image_data_uri` (base64). **Recommended for agent workflows.** |
+| `language` | `string` | `"en"` | Language for all user-facing text (e.g. `"zh"`, `"ja"`, `"fr"`). Pass the language the agent is conversing in. |
 | `delete_after` | `boolean` | `true` | Delete original file(s) after loading into memory. |
 
 ## Success Response
@@ -112,7 +114,7 @@ if (result.status === 'success') {
 | `lens_profile` | `string` | e.g. `"Noctilux-M 50mm f/0.95 ASPH"` |
 | `lens_rationale` | `string` | Why this lens character |
 | `burst_selection` | `object` | (Burst only) `{selected_index, total_images, rationale}` |
-| `source_file_deletion` | `string` | `"deleted"` / `"delete_failed"` / `"disabled"` |
+| `source_file_deletion` | `string` | `"deleted"` / `"partial"` / `"delete_failed"` / `"disabled"` |
 
 ## Error Response
 
@@ -149,7 +151,9 @@ Override the model for any agent role:
 
 | Variable | Default | Description |
 |---|---|---|
+| `AGENTLUX_LANGUAGE` | `en` | Default language for user-facing text. Overridden by `language` parameter per call. |
 | `AGENTLUX_MAX_IMAGE_BYTES` | `31457280` (30MB) | Maximum input image size |
+| `AGENTLUX_MAX_BURST_SIZE` | `20` | Maximum number of images in burst mode |
 | `AGENTLUX_VLM_TIMEOUT_MS` | `15000` | VLM request timeout |
 | `AGENTLUX_VLM_MAX_RETRIES` | `2` | VLM retry count for transient errors |
 

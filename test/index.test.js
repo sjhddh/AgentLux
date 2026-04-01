@@ -525,6 +525,82 @@ test('success response includes presentation narrative', async () => {
     }
 });
 
+test('language parameter produces localized presentation', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath);
+    global.fetch = mockTwoPass(
+        { master: 'fan_ho', color_profile: 'm_monochrom', lens: 'noctilux_50',
+          master_rationale: '光影对比强烈', color_rationale: '极致黑白', lens_rationale: '梦幻虚化' },
+        { x: 10, y: 10, width: 60, height: 40, rule: '对角线光束构成强烈的引导线' }
+    );
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, language: 'zh', delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.ok(result.presentation.includes('Fan Ho'), 'presentation should include master name');
+        assert.ok(result.presentation.includes('对角线光束'), 'presentation should include localized rule');
+        assert.ok(!result.presentation.includes('Recomposed through'), 'non-en presentation should not use English template');
+        assert.equal(result.master_rationale, '光影对比强烈');
+        assert.equal(result.composition_rule, '对角线光束构成强烈的引导线');
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+test('output_path with nonexistent parent directory returns INPUT_ERROR', async () => {
+    setup();
+    try {
+        const result = await agentlux.execute({
+            image_path: '/tmp/agentlux_test_dummy.jpg',
+            output_path: '/nonexistent_dir_xyz_' + Date.now() + '/out.jpg',
+            delete_after: false
+        });
+        assert.equal(result.status, 'error');
+        assert.equal(result.error_code, 'INPUT_ERROR');
+        assert.ok(result.message.includes('parent directory'));
+    } finally {
+        teardown();
+    }
+});
+
+test('burst mode partial deletion tracked correctly', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const lockedDir = path.join(tmpDir, 'locked');
+    await fs.mkdir(lockedDir);
+
+    const normalPath = path.join(tmpDir, 'normal.jpg');
+    const lockedPath = path.join(lockedDir, 'locked.jpg');
+    await createFixtureImage(normalPath);
+    await createFixtureImage(lockedPath);
+
+    await fs.chmod(lockedDir, 0o555);
+
+    let fetchCalls = 0;
+    global.fetch = async () => {
+        fetchCalls += 1;
+        if (fetchCalls === 1) return mockOpenAIResponse({ selected_index: 0, rationale: 'Pick first' });
+        if (fetchCalls === 2) return mockOpenAIResponse(DEFAULT_CURATOR);
+        return mockOpenAIResponse({ x: 5, y: 5, width: 40, height: 30, rule: 'Partial test' });
+    };
+
+    try {
+        const result = await agentlux.execute({ image_paths: [normalPath, lockedPath], delete_after: true });
+        assert.equal(result.status, 'success');
+        assert.equal(result.source_file_deletion, 'partial');
+        assert.equal(typeof result.source_file_deletion_message, 'string');
+        assert.ok(result.source_file_deletion_message.includes('deleted'));
+        assert.ok(result.source_file_deletion_message.includes('failed'));
+    } finally {
+        await fs.chmod(lockedDir, 0o755);
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
 test('error responses include recovery_hint for agent self-healing', async () => {
     setup();
     process.env.AGENTLUX_VLM_MAX_RETRIES = '0';

@@ -443,11 +443,12 @@ function parseCuratorResponse(raw) {
 // Agent Pipelines
 // ============================================================
 
-async function curateImage(imageBase64, width, height) {
+async function curateImage(imageBase64, width, height, lang) {
     const provider = resolveProvider(process.env.AGENTLUX_CURATOR_MODEL);
     const masterList = Object.entries(MASTER_REGISTRY).map(([k, m]) => `  - "${k}": ${m.name} (${m.style})`).join('\n');
     const profileList = Object.entries(LEICA_PROFILES).map(([k, p]) => `  - "${k}": ${p.name}`).join('\n');
     const lensList = Object.entries(LENS_PROFILES).map(([k, l]) => `  - "${k}": ${l.name}`).join('\n');
+    const langInstruction = lang !== 'en' ? `\n\nIMPORTANT: Write ALL text values (master_rationale, color_rationale, lens_rationale) in ${lang}. Keep JSON keys and selection keys in English.` : '';
 
     const prompt = `You are the Chief Curator of a world-class Leica photography exhibition. You have spent decades studying the masters who defined 35mm street and documentary photography.
 
@@ -467,22 +468,24 @@ Select the lens character:
 ${lensList}
 
 Return ONLY a JSON object:
-{"master": "key", "master_rationale": "brief why", "color_profile": "key", "color_rationale": "brief why", "lens": "key", "lens_rationale": "brief why"}`;
+{"master": "key", "master_rationale": "brief why", "color_profile": "key", "color_rationale": "brief why", "lens": "key", "lens_rationale": "brief why"}${langInstruction}`;
 
     const request = buildVLMRequest(provider, prompt, imageBase64);
     return parseCuratorResponse(await callVLM(request));
 }
 
-async function masterCompose(imageBase64, width, height, masterKey) {
+async function masterCompose(imageBase64, width, height, masterKey, lang) {
     const provider = resolveProvider(process.env.AGENTLUX_MASTER_MODEL);
     const master = MASTER_REGISTRY[masterKey] || MASTER_REGISTRY.bresson;
-    const request = buildVLMRequest(provider, master.prompt(width, height), imageBase64);
+    const langInstruction = lang !== 'en' ? `\n\nIMPORTANT: Write the "rule" value in ${lang}. Keep JSON keys, x, y, width, height as numbers.` : '';
+    const request = buildVLMRequest(provider, master.prompt(width, height) + langInstruction, imageBase64);
     return parseCropBox(await callVLM(request));
 }
 
-async function selectDecisiveMoment(thumbnailsBase64) {
+async function selectDecisiveMoment(thumbnailsBase64, lang) {
     const provider = resolveProvider(process.env.AGENTLUX_SELECTOR_MODEL || process.env.AGENTLUX_CURATOR_MODEL);
     const count = thumbnailsBase64.length;
+    const langInstruction = lang && lang !== 'en' ? `\n\nIMPORTANT: Write the "rationale" value in ${lang}.` : '';
     const prompt = `You are selecting The Decisive Moment from a burst of ${count} consecutive frames (indexed 0 to ${count - 1}).
 
 Evaluate each frame for:
@@ -494,7 +497,7 @@ Evaluate each frame for:
 There is only ONE decisive moment. Find it.
 
 Return ONLY a JSON object:
-{"selected_index": int, "rationale": "Why THIS frame captures the unrepeatable instant"}`;
+{"selected_index": int, "rationale": "Why THIS frame captures the unrepeatable instant"}${langInstruction}`;
 
     const request = buildMultiImageVLMRequest(provider, prompt, thumbnailsBase64);
     const raw = await callVLM(request);
@@ -561,11 +564,12 @@ async function generateFilmGrain(width, height, grainConfig) {
 
 async function processImage(buffer, metadata, context) {
     const { width, height } = metadata;
+    const lang = context.lang || 'en';
     const vlmJpeg = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
     const base64 = vlmJpeg.toString('base64');
 
-    const curation = await curateImage(base64, width, height);
-    const cropBox = await masterCompose(base64, width, height, curation.master);
+    const curation = await curateImage(base64, width, height, lang);
+    const cropBox = await masterCompose(base64, width, height, curation.master, lang);
     const safeCrop = sanitizeCropBox(cropBox, width, height);
 
     const profile = LEICA_PROFILES[curation.colorProfile] || LEICA_PROFILES.m10;
@@ -620,12 +624,19 @@ async function processImage(buffer, metadata, context) {
 
     const narrativeParts = [];
     if (context.burstResult) {
-        narrativeParts.push(`Selected frame ${context.burstResult.selected_index + 1} of ${context.burstResult.total_images}: ${context.burstResult.rationale}`);
+        narrativeParts.push(context.burstResult.rationale);
     }
-    narrativeParts.push(`Recomposed through the eye of ${masterName} (${masterStyle}).`);
-    if (safeCrop.rule) narrativeParts.push(safeCrop.rule);
-    narrativeParts.push(`Color grade: ${profile.name}.`);
-    narrativeParts.push(`Lens character: ${lensName}.`);
+    if (lang === 'en') {
+        narrativeParts.push(`Recomposed through the eye of ${masterName} (${masterStyle}).`);
+        if (safeCrop.rule) narrativeParts.push(safeCrop.rule);
+        narrativeParts.push(`Color grade: ${profile.name}.`);
+        narrativeParts.push(`Lens character: ${lensName}.`);
+    } else {
+        narrativeParts.push(`${masterName} · ${masterStyle}`);
+        if (safeCrop.rule) narrativeParts.push(safeCrop.rule);
+        narrativeParts.push(profile.name);
+        narrativeParts.push(lensName);
+    }
     result.presentation = narrativeParts.join('\n');
 
     return result;
@@ -635,11 +646,12 @@ async function processImage(buffer, metadata, context) {
 // Main Execute
 // ============================================================
 
-async function execute({ image_path, image_paths, output_path, delete_after = true }) {
+async function execute({ image_path, image_paths, output_path, language, delete_after = true }) {
     try {
         if (typeof delete_after !== 'boolean') {
             throw new AgentLuxError('INPUT_ERROR', 'delete_after must be a boolean.');
         }
+        const lang = (typeof language === 'string' && language.trim()) || process.env.AGENTLUX_LANGUAGE || 'en';
         if (output_path !== undefined) {
             if (typeof output_path !== 'string' || output_path.trim().length === 0) {
                 throw new AgentLuxError('INPUT_ERROR', 'output_path must be a non-empty string.');
@@ -694,7 +706,7 @@ async function execute({ image_path, image_paths, output_path, delete_after = tr
             const thumbnails = await Promise.all(loaded.map(({ buffer }) =>
                 sharp(buffer).resize(512, 512, { fit: 'inside' }).jpeg({ quality: 70 }).toBuffer().then(b => b.toString('base64'))
             ));
-            const { selectedIndex, rationale } = await selectDecisiveMoment(thumbnails);
+            const { selectedIndex, rationale } = await selectDecisiveMoment(thumbnails, lang);
 
             const selected = loaded[selectedIndex];
             const meta = await sharp(selected.buffer).metadata();
@@ -703,7 +715,7 @@ async function execute({ image_path, image_paths, output_path, delete_after = tr
             }
 
             return await processImage(selected.buffer, meta, {
-                delete_after, deletionStatus, deletionMessage, outputPath: output_path,
+                lang, delete_after, deletionStatus, deletionMessage, outputPath: output_path,
                 burstResult: { selected_index: selectedIndex, total_images: image_paths.length, rationale }
             });
         }
@@ -729,7 +741,7 @@ async function execute({ image_path, image_paths, output_path, delete_after = tr
         }
 
         return await processImage(buffer, metadata, {
-            delete_after, deletionStatus, deletionMessage, outputPath: output_path, burstResult: null
+            lang, delete_after, deletionStatus, deletionMessage, outputPath: output_path, burstResult: null
         });
     } catch (err) {
         if (err instanceof AgentLuxError) {
@@ -760,6 +772,7 @@ module.exports = {
             image_path: { type: 'string', description: 'Absolute path to a single input image.' },
             image_paths: { type: 'array', items: { type: 'string' }, description: 'Array of absolute paths for burst mode. Mutually exclusive with image_path.' },
             output_path: { type: 'string', description: 'Absolute path to write the output JPEG. If omitted, output is returned as image_data_uri (base64). Recommended for agent workflows.' },
+            language: { type: 'string', description: 'Language for user-facing text (e.g. "zh", "ja", "fr", "de"). Defaults to "en". Pass the language the agent is conversing in.' },
             delete_after: { type: 'boolean', description: 'Delete original image(s) from disk after loading. Defaults to true (zero-retention).', default: true }
         },
         additionalProperties: false

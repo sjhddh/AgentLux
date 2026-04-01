@@ -1,6 +1,6 @@
 {
   "name": "agentlux",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Multi-master Leica composition engine with dynamic color science, lens simulation, film grain, and decisive moment selection for autonomous vision agents.",
   "main": "index.js",
   "scripts": {

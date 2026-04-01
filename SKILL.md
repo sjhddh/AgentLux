@@ -39,6 +39,7 @@ async function run() {
     const result = await agentlux.execute({
         image_path: "ABSOLUTE_PATH_TO_INPUT",
         output_path: "/tmp/agentlux_output_" + Date.now() + ".jpg",
+        language: "zh",      // match the language you are conversing in (e.g. "en", "zh", "ja", "fr")
         delete_after: true
     });
     console.log(JSON.stringify(result));
@@ -115,6 +116,7 @@ The system will auto-select the strongest frame, then compose and color-grade it
 | `AGENTLUX_CUSTOM_API_KEY` | | Custom API key |
 | `AGENTLUX_CURATOR_MODEL` | Optional | Override curator model (e.g. `claude-sonnet-4-20250514`) |
 | `AGENTLUX_MASTER_MODEL` | Optional | Override master model (e.g. `gpt-4o`) |
+| `AGENTLUX_LANGUAGE` | Optional | Default language for user-facing text (e.g. `zh`, `ja`, `fr`). Overridden by `language` parameter. |
 
 ## What This Skill Does (For Context)
 
