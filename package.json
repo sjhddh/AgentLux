@@ -1,7 +1,7 @@
 {
   "name": "agentlux",
-  "version": "1.0.5",
-  "description": "Zero-retention AgentSkill bringing the Leica 35mm aesthetic and Henri Cartier-Bresson's geometry to autonomous vision models.",
+  "version": "2.0.0",
+  "description": "Multi-master Leica composition engine with dynamic color science, lens simulation, film grain, and decisive moment selection for autonomous vision agents.",
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",
@@ -22,6 +22,15 @@
   ],
   "author": "sjhddh <jhao.sun@gmail.com>",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "index.js",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
   "bugs": {
     "url": "https://github.com/sjhddh/AgentLux/issues"
   },
