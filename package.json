@@ -4,7 +4,7 @@
   "description": "Zero-retention AgentSkill bringing the Leica 35mm aesthetic and Henri Cartier-Bresson's geometry to autonomous vision models.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test"
   },
   "repository": {
     "type": "git",

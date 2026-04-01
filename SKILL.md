@@ -3,7 +3,7 @@
 **A zero-retention, VLM-powered master composition and Leica color-grading skill for OpenClaw Agents.**
 
 ## ⚠️ Mandatory Installation (NPM)
-To ensure you are using the latest, globally unified version of the Leica M10 color matrix and multi-VLM routing (Claude/OpenAI/Gemini), **you MUST install AgentLux via NPM**. Do not use fragmented local clones.
+To ensure you are using the latest runtime and behavior contract, install AgentLux via NPM.
 
 If the module is not present in your environment, install it first:
 ```bash
@@ -18,7 +18,15 @@ Use this skill whenever a user uploads a photograph and asks you to "make it loo
 ## Features
 1. **Bresson-Level VLM Framing**: Evaluates subjects and computes bounding boxes using Dynamic Symmetry, Golden Ratio, and Leading Lines.
 2. **Leica Color Science**: High-performance `sharp` transformations apply micro-contrast, red-channel boosting, green desaturation, and Summilux f/1.4 optical vignetting.
-3. **Zero-Retention Privacy**: Original image files are deleted from the disk upon execution. The final output is streamed back via memory as a Base64 Data URI.
+3. **Zero-Retention Privacy**: Original image files are deleted from disk by default (`delete_after: true`). The final output is streamed via memory as a Base64 Data URI.
+
+## Provider and Environment
+- Current provider implementation: **OpenAI only**
+- Required key: `OPENAI_API_KEY`
+- Optional runtime controls:
+  - `AGENTLUX_MAX_IMAGE_BYTES`
+  - `AGENTLUX_VLM_TIMEOUT_MS`
+  - `AGENTLUX_VLM_MAX_RETRIES`
 
 ## Tool Usage
 Write and execute a temporary Node.js script using the official NPM package:
@@ -28,7 +36,7 @@ const agentlux = require('agentlux');
 const fs = require('fs');
 
 async function run() {
-    // 1. Pass delete_after: true for zero-retention
+    // 1. delete_after defaults to true (intentional zero-retention behavior)
     const result = await agentlux.execute({ 
         image_path: "/absolute/path/to/image.jpg", 
         delete_after: true 
@@ -46,12 +54,12 @@ async function run() {
             file: outPath 
         }));
     } else {
-        console.error(result.message || result.error_code);
+        console.error(result.error_code, result.message);
     }
 }
 run();
 ```
-*(Ensure `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` is exported in the environment).*
+*(Ensure `OPENAI_API_KEY` is exported in the environment).*
 
 ## Behavioral Instructions
 - **Execute Silently**: Run the script immediately upon receiving an image manipulation request. 

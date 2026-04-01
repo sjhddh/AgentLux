@@ -1,36 +1,46 @@
-# AgentLux 🔴📸
+# AgentLux
 
-An open-source **AgentSkill** that imbues autonomous AI vision models with the soul of a Leica and the geometric discipline of Henri Cartier-Bresson.
+AgentLux is an AgentSkill for automatic image recomposition and Leica-style color grading.
+It reads an input image, asks an OpenAI vision model for an optimal crop, applies a sharp
+pipeline, and returns the output as a JPEG data URI.
 
-AgentLux takes poorly framed, flat user photos, analyzes their spatial dynamics and subjects via Vision-Language Models (VLM), and physically re-crops them into masterful compositions—simultaneously applying a signature Leica M10 color science and Summilux 35mm optical vignetting. All of this happens autonomously, in memory, in less than a second.
+## Runtime Contract
 
-### 🌟 Key Features
-- **The Decisive Moment Framing**: Instructs VLM logic using classical photojournalism principles (Dynamic Symmetry, Golden Ratio, Leading Lines).
-- **Leica M-Series Color Science**: Mathematical `recomb` matrices shift colors (rich reds, muted greens) while `linear` S-curves create an unmistakable filmic micro-contrast.
-- **Summilux Lens Falloff**: A mathematically applied `multiply` optical vignette highlights the focal subject dynamically.
+- Provider: OpenAI Chat Completions (`gpt-4o`) via `OPENAI_API_KEY`
+- Input: absolute `image_path` and optional `delete_after`
+- Default behavior: `delete_after=true` (intentional product design)
+- Output:
+  - success: cropped image data URI + crop coordinates
+  - error: structured `error_code` + `message` (+ optional `details`)
 
-### 🔥 Zero-Retention Architecture
-Privacy and storage efficiency are paramount. AgentLux implements a strict **Zero-Retention Memory System**:
-1. The image is loaded into an ephemeral memory buffer.
-2. The original file is *immediately unlinked/deleted* from the disk to preserve privacy.
-3. The cropped, color-graded artifact is returned to the agent strictly as a Base64 Data URI.
-4. **Result**: Zero disk footprint. A purely functional digital darkroom.
+## Zero-Retention Behavior
 
-### 🛠️ Agent Implementation (Node.js / OpenClaw)
-Once installed in your OpenClaw environment, your agent can call the skill natively:
+The default mode is immediate deletion of the source file after it is read into memory.
+This is deliberate and keeps disk retention minimal for plug-and-play agent workflows.
+
+If you need to keep the source file, call with `delete_after: false`.
+
+## Environment Variables
+
+- `OPENAI_API_KEY` (required)
+- `AGENTLUX_MAX_IMAGE_BYTES` (optional, default `31457280`)
+- `AGENTLUX_VLM_TIMEOUT_MS` (optional, default `15000`)
+- `AGENTLUX_VLM_MAX_RETRIES` (optional, default `2`)
+
+## Example
+
 ```javascript
-const result = await agentlux_compose({ 
-    image_path: "/tmp/user_upload_123.jpg", 
-    delete_after: true 
+const agentlux = require('agentlux');
+
+const result = await agentlux.execute({
+    image_path: '/tmp/user_upload_123.jpg',
+    delete_after: true
 });
 
-// The agent receives the Data URI and streams it directly back to the user.
-console.log(result.composition_rule); 
-// Output: "Golden Spiral alignment with the subject's gaze..."
-```
-
-### 📦 Installation
-Available via [ClawHub](https://clawhub.com).
-```bash
-clawhub install agentlux
+if (result.status === 'success') {
+    console.log(result.composition_rule);
+    console.log(result.source_file_deletion); // deleted | delete_failed | disabled
+} else {
+    console.error(result.error_code, result.message);
+}
 ```
