@@ -113,21 +113,52 @@
    - Resolution: added `setup()`/`teardown()` helpers that save and restore env + `global.fetch`.
    - Status: fixed.
 
+## Third-Pass Review Findings (round-2 closure)
+
+### High
+1. `parseCropBox` non-object input defense
+   - Evidence: VLM returning `null`, a primitive, or an array causes `in` operator to throw native `TypeError`, misclassified as `VLM_NETWORK_ERROR` (retryable).
+   - Resolution: added type guard `!raw || typeof raw !== 'object' || Array.isArray(raw)` → `VLM_SCHEMA_ERROR`.
+   - Status: fixed.
+
+2. `delete_after` string-boolean misuse risk
+   - Evidence: passing `delete_after: "false"` is truthy, silently deletes source file.
+   - Resolution: added `typeof delete_after !== 'boolean'` check → `INPUT_ERROR`.
+   - Status: fixed.
+
+### Medium
+1. No lint/static-check gate in CI
+   - Evidence: CI had `npm test` only, no static analysis.
+   - Resolution: added ESLint (`@eslint/js` recommended + Node globals), `npm run lint` script, and CI lint step before test.
+   - Status: fixed.
+
+2. Missing regression tests for delete_failed, timeout, 5xx retry
+   - Evidence: `delete_failed` branch, `VLM_TIMEOUT`, and 503/429 retry paths had zero test coverage.
+   - Resolution: added 5 tests: string delete_after rejection, delete_failed permission error, null crop defense, VLM_TIMEOUT on hung fetch, HTTP 503 retry-then-succeed.
+   - Status: fixed.
+
+### Low (deferred)
+1. Path allowlist/sandbox constraint
+   - Acknowledged residual risk; acceptable under current plug-and-play scope.
+   - Will add optional `AGENTLUX_ALLOWED_ROOT` in a future iteration.
+
 ## Test Evidence
-- Command: `npm test`
-- Result: 10 passed, 0 failed (5 original + 5 new)
+- Command: `npm run lint && npm test`
+- Lint: 0 errors, 0 warnings
+- Tests: 15 passed, 0 failed
 
 ## Priority Roadmap
 - P0 (done): runtime guardrails + error taxonomy + core tests
 - P1 (done): docs/contract alignment + CI test gate
 - P1.5 (done): retry correctness + env validation + input validation tests + test isolation
-- P2 (recommended next):
-  - add lightweight lint/check gate
+- P2 (done): parseCropBox defense + delete_after type guard + ESLint gate + full regression coverage
+- P3 (recommended next):
   - add optional structured logs with request correlation
   - add load tests for large-image throughput profile
+  - add optional `AGENTLUX_ALLOWED_ROOT` path sandbox
 
 ## Release Blockers
-- None remaining for the scoped plan.
+- None remaining.
 - Recommended pre-release checks:
   - verify `OPENAI_API_KEY` present in deployment env
   - verify `AGENTLUX_MAX_IMAGE_BYTES` policy matches production limits

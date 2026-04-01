@@ -1,9 +1,10 @@
 {
   "name": "agentlux",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Zero-retention AgentSkill bringing the Leica 35mm aesthetic and Henri Cartier-Bresson's geometry to autonomous vision models.",
   "main": "index.js",
   "scripts": {
+    "lint": "eslint .",
     "test": "node --test"
   },
   "repository": {
@@ -27,5 +28,10 @@
   "homepage": "https://github.com/sjhddh/AgentLux#readme",
   "dependencies": {
     "sharp": "^0.33.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0"
   }
 }

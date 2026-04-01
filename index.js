@@ -34,6 +34,9 @@ function isFinitePositiveInt(value) {
 }
 
 function parseCropBox(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new AgentLuxError('VLM_SCHEMA_ERROR', 'VLM response is not a valid JSON object.');
+    }
     const requiredKeys = ['x', 'y', 'width', 'height'];
     for (const key of requiredKeys) {
         if (!(key in raw)) {
@@ -187,6 +190,9 @@ Format: {"x": int, "y": int, "width": int, "height": int, "rule": "string explai
 
 async function execute({ image_path, delete_after = true }) {
     try {
+        if (typeof delete_after !== 'boolean') {
+            throw new AgentLuxError('INPUT_ERROR', 'delete_after must be a boolean.');
+        }
         if (typeof image_path !== 'string' || image_path.trim().length === 0) {
             throw new AgentLuxError('INPUT_ERROR', 'image_path must be a non-empty string.');
         }
