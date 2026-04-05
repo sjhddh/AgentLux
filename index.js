@@ -226,6 +226,68 @@ const LENS_PROFILES = {
 };
 
 // ============================================================
+// Aesthetic Reference Library
+// ============================================================
+
+const AESTHETIC_REFERENCE = {
+    compositionalRules: {
+        rule_of_thirds: 'Subject or key elements at intersection points of a 3x3 grid',
+        golden_ratio: 'Spiral or rectangular composition following 1:1.618 proportions',
+        dynamic_symmetry: 'Diagonal-based composition creating visual tension and movement',
+        leading_lines: 'Lines within the frame guiding the eye toward the subject',
+        negative_space: 'Intentional empty areas giving the subject room to breathe',
+        frame_within_frame: 'Natural elements forming a secondary frame around the subject',
+        subject_isolation: 'Clear separation between subject and background through placement or contrast'
+    },
+    tonalMoods: {
+        high_key: 'Predominantly bright tones, airy and optimistic',
+        low_key: 'Predominantly dark tones, dramatic and moody',
+        high_contrast: 'Strong difference between lights and darks, bold and graphic',
+        soft_tonal: 'Gentle gradations, subtle and contemplative',
+        split_lighting: 'Half light / half shadow, dramatic character revelation',
+        golden_hour: 'Warm directional light with long shadows, nostalgic warmth',
+        overcast_diffuse: 'Even soft lighting without harsh shadows, understated calm'
+    },
+    genreFrameworks: {
+        portrait: {
+            key_concerns: 'Eye contact, expression, skin tone fidelity, background separation',
+            crop_guidance: 'Preserve headroom; avoid cutting at joints; maintain eye-level framing',
+            effects_bias: 'Favor clean rendering; grain only for editorial/fashion mood'
+        },
+        landscape: {
+            key_concerns: 'Horizon placement, depth layers (foreground/mid/background), sky drama',
+            crop_guidance: 'Respect the horizon line; rule of thirds for sky/ground division',
+            effects_bias: 'Subtle vignette to frame; grain rarely appropriate'
+        },
+        street: {
+            key_concerns: 'Decisive moment, gesture, context, layering, spontaneity',
+            crop_guidance: 'Tighten to emphasize geometry and tension; embrace edge activity',
+            effects_bias: 'Grain and contrast serve the raw documentary feel'
+        },
+        architecture: {
+            key_concerns: 'Verticals, symmetry, geometric patterns, light on surfaces',
+            crop_guidance: 'Preserve symmetry axes; respect structural geometry',
+            effects_bias: 'Clean rendering preferred; vignette can emphasize central forms'
+        },
+        still_life: {
+            key_concerns: 'Arrangement, texture, light quality, color harmony',
+            crop_guidance: 'Tight framing to emphasize texture; negative space if intentional',
+            effects_bias: 'Depends on mood — commercial wants clean, art wants character'
+        }
+    }
+};
+
+function buildAestheticPromptSection() {
+    const rules = Object.entries(AESTHETIC_REFERENCE.compositionalRules)
+        .map(([k, v]) => `  - ${k.replace(/_/g, ' ')}: ${v}`).join('\n');
+    const moods = Object.entries(AESTHETIC_REFERENCE.tonalMoods)
+        .map(([k, v]) => `  - ${k.replace(/_/g, ' ')}: ${v}`).join('\n');
+    const genres = Object.entries(AESTHETIC_REFERENCE.genreFrameworks)
+        .map(([k, g]) => `  - ${k}: ${g.key_concerns}. Crop: ${g.crop_guidance}. Effects: ${g.effects_bias}`).join('\n');
+    return `Compositional patterns to evaluate:\n${rules}\n\nTonal moods to consider:\n${moods}\n\nGenre frameworks:\n${genres}`;
+}
+
+// ============================================================
 // VLM Provider Abstraction
 // ============================================================
 
@@ -425,6 +487,10 @@ function sanitizeCropBox(cropBox, imageWidth, imageHeight) {
     return { ...cropBox, x, y, width, height };
 }
 
+const VALID_COMPOSITION_QUALITY = new Set(['excellent', 'good', 'fair', 'poor']);
+const VALID_PROCESSING_INTENSITY = new Set(['minimal', 'moderate', 'full']);
+const VALID_VIGNETTE_INTENSITY = new Set(['none', 'subtle', 'standard', 'dramatic']);
+
 function parseCuratorResponse(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         throw new AgentLuxError('VLM_SCHEMA_ERROR', 'Curator response is not a valid JSON object.');
@@ -435,7 +501,14 @@ function parseCuratorResponse(raw) {
         lens: typeof raw.lens === 'string' && raw.lens in LENS_PROFILES ? raw.lens : 'summilux_35',
         masterRationale: typeof raw.master_rationale === 'string' ? raw.master_rationale : '',
         colorRationale: typeof raw.color_rationale === 'string' ? raw.color_rationale : '',
-        lensRationale: typeof raw.lens_rationale === 'string' ? raw.lens_rationale : ''
+        lensRationale: typeof raw.lens_rationale === 'string' ? raw.lens_rationale : '',
+        compositionQuality: typeof raw.composition_quality === 'string' && VALID_COMPOSITION_QUALITY.has(raw.composition_quality) ? raw.composition_quality : 'fair',
+        cropRecommended: typeof raw.crop_recommended === 'boolean' ? raw.crop_recommended : true,
+        cropRationale: typeof raw.crop_rationale === 'string' ? raw.crop_rationale : '',
+        processingIntensity: typeof raw.processing_intensity === 'string' && VALID_PROCESSING_INTENSITY.has(raw.processing_intensity) ? raw.processing_intensity : 'full',
+        grainAppropriate: typeof raw.grain_appropriate === 'boolean' ? raw.grain_appropriate : null,
+        grainRationale: typeof raw.grain_rationale === 'string' ? raw.grain_rationale : '',
+        vignetteIntensity: typeof raw.vignette_intensity === 'string' && VALID_VIGNETTE_INTENSITY.has(raw.vignette_intensity) ? raw.vignette_intensity : 'standard'
     };
 }
 
@@ -448,15 +521,34 @@ async function curateImage(imageBase64, width, height, lang) {
     const masterList = Object.entries(MASTER_REGISTRY).map(([k, m]) => `  - "${k}": ${m.name} (${m.style})`).join('\n');
     const profileList = Object.entries(LEICA_PROFILES).map(([k, p]) => `  - "${k}": ${p.name}`).join('\n');
     const lensList = Object.entries(LENS_PROFILES).map(([k, l]) => `  - "${k}": ${l.name}`).join('\n');
-    const langInstruction = lang !== 'en' ? `\n\nIMPORTANT: Write ALL text values (master_rationale, color_rationale, lens_rationale) in ${lang}. Keep JSON keys and selection keys in English.` : '';
+    const aestheticSection = buildAestheticPromptSection();
+    const langInstruction = lang !== 'en' ? `\n\nIMPORTANT: Write ALL text values (master_rationale, color_rationale, lens_rationale, crop_rationale, grain_rationale) in ${lang}. Keep JSON keys and selection keys in English.` : '';
 
-    const prompt = `You are the Chief Curator of a world-class Leica photography exhibition. You have spent decades studying the masters who defined 35mm street and documentary photography.
+    const prompt = `You are the Chief Curator of a world-class Leica photography exhibition. You have spent decades studying the masters who defined 35mm street and documentary photography. You exercise restraint — a great curator knows when NOT to intervene.
 
 Analyze this photograph (${width}x${height} pixels). Consider:
 1. The dominant light/shadow structure and tonal range
 2. Geometric patterns, leading lines, and spatial tensions
 3. The emotional weight, narrative content, and subject matter
 4. Color palette, contrast characteristics, and mood
+5. Whether the existing composition is already strong — if so, respect it
+
+${aestheticSection}
+
+COMPOSITION ASSESSMENT:
+Evaluate the image's existing composition. Rate composition_quality:
+- "excellent": Strong intentional composition (clear use of recognized patterns, balanced framing, purposeful subject placement). Do NOT recommend cropping.
+- "good": Solid composition with minor improvement opportunities. Cropping may refine but is not critical.
+- "fair": Composition has potential but needs reframing to reach its best form.
+- "poor": Weak or accidental framing that would greatly benefit from recomposition.
+
+Set crop_recommended to false ONLY when composition_quality is "excellent" and the original framing should be preserved entirely.
+
+EFFECTS ASSESSMENT:
+Evaluate what processing this image genuinely needs:
+- processing_intensity: "minimal" (color grade only), "moderate" (color + selective effects), or "full" (the complete treatment)
+- grain_appropriate: true/false — would film grain genuinely enhance this image's mood, or would it feel like a filter slapped on?
+- vignette_intensity: "none", "subtle", "standard", or "dramatic" — how much vignette serves this specific image?
 
 Select the ONE master photographer whose compositional philosophy best matches this image:
 ${masterList}
@@ -468,17 +560,25 @@ Select the lens character:
 ${lensList}
 
 Return ONLY a JSON object:
-{"master": "key", "master_rationale": "brief why", "color_profile": "key", "color_rationale": "brief why", "lens": "key", "lens_rationale": "brief why"}${langInstruction}`;
+{"master": "key", "master_rationale": "brief why", "color_profile": "key", "color_rationale": "brief why", "lens": "key", "lens_rationale": "brief why", "composition_quality": "excellent|good|fair|poor", "crop_recommended": true/false, "crop_rationale": "brief why", "processing_intensity": "minimal|moderate|full", "grain_appropriate": true/false, "grain_rationale": "brief why", "vignette_intensity": "none|subtle|standard|dramatic"}${langInstruction}`;
 
     const request = buildVLMRequest(provider, prompt, imageBase64);
     return parseCuratorResponse(await callVLM(request));
 }
 
-async function masterCompose(imageBase64, width, height, masterKey, lang) {
+async function masterCompose(imageBase64, width, height, masterKey, lang, curation) {
+    if (curation && curation.compositionQuality === 'excellent' && !curation.cropRecommended) {
+        return {
+            x: 0, y: 0, width, height,
+            rule: curation.cropRationale || 'Original composition preserved — already strong.'
+        };
+    }
+
     const provider = resolveProvider(process.env.AGENTLUX_MASTER_MODEL);
     const master = MASTER_REGISTRY[masterKey] || MASTER_REGISTRY.bresson;
+    const aestheticHint = `\n\nAesthetic context: ${buildAestheticPromptSection()}\n\nIf the composition is already strong, you may return coordinates covering the full frame (x:0, y:0, width:${width}, height:${height}) with a rule explaining why the original framing is optimal.`;
     const langInstruction = lang !== 'en' ? `\n\nIMPORTANT: Write the "rule" value in ${lang}. Keep JSON keys, x, y, width, height as numbers.` : '';
-    const request = buildVLMRequest(provider, master.prompt(width, height) + langInstruction, imageBase64);
+    const request = buildVLMRequest(provider, master.prompt(width, height) + aestheticHint + langInstruction, imageBase64);
     return parseCropBox(await callVLM(request));
 }
 
@@ -569,17 +669,30 @@ async function processImage(buffer, metadata, context) {
     const base64 = vlmJpeg.toString('base64');
 
     const curation = await curateImage(base64, width, height, lang);
-    const cropBox = await masterCompose(base64, width, height, curation.master, lang);
+    const cropBox = await masterCompose(base64, width, height, curation.master, lang, curation);
     const safeCrop = sanitizeCropBox(cropBox, width, height);
+    const cropped = !(safeCrop.x === 0 && safeCrop.y === 0 && safeCrop.width === width && safeCrop.height === height);
 
     const profile = LEICA_PROFILES[curation.colorProfile] || LEICA_PROFILES.m10;
     const lens = LENS_PROFILES[curation.lens] || LENS_PROFILES.summilux_35;
     const cw = safeCrop.width;
     const ch = safeCrop.height;
 
+    const isMinimal = curation.processingIntensity === 'minimal';
+    const shouldApplyGrain = !isMinimal
+        && curation.grainAppropriate !== false
+        && !!profile.grain;
+
+    const VIGNETTE_SCALE = { none: 0, subtle: 0.5, standard: 1.0, dramatic: 1.5 };
+    const effectiveVignetteLevel = isMinimal ? 'none' : curation.vignetteIntensity;
+    const vignetteScale = VIGNETTE_SCALE[effectiveVignetteLevel] ?? 1.0;
+
     const overlays = [];
-    overlays.push({ input: Buffer.from(buildVignetteSvg(cw, ch, lens)), blend: 'multiply' });
-    if (profile.grain) {
+    if (vignetteScale > 0) {
+        const scaledLens = { ...lens, vignetteStrength: Math.min(0.9, lens.vignetteStrength * vignetteScale) };
+        overlays.push({ input: Buffer.from(buildVignetteSvg(cw, ch, scaledLens)), blend: 'multiply' });
+    }
+    if (shouldApplyGrain) {
         const grainBuf = await generateFilmGrain(cw, ch, profile.grain);
         if (grainBuf) overlays.push({ input: grainBuf, blend: 'soft-light' });
     }
@@ -587,9 +700,11 @@ async function processImage(buffer, metadata, context) {
     let processed = sharp(buffer)
         .extract({ left: safeCrop.x, top: safeCrop.y, width: cw, height: ch });
     processed = applyLeicaColor(processed, profile);
+    processed = processed.sharpen({ sigma: lens.sharpenSigma, flat: lens.sharpenFlat, jagged: lens.sharpenJagged });
+    if (overlays.length > 0) {
+        processed = processed.composite(overlays);
+    }
     const outputBuffer = await processed
-        .sharpen({ sigma: lens.sharpenSigma, flat: lens.sharpenFlat, jagged: lens.sharpenJagged })
-        .composite(overlays)
         .withMetadata()
         .jpeg({ quality: 92 })
         .toBuffer();
@@ -598,6 +713,15 @@ async function processImage(buffer, metadata, context) {
     const masterStyle = MASTER_REGISTRY[curation.master]?.style || '';
     const lensName = LENS_PROFILES[curation.lens]?.name || curation.lens;
 
+    const grainApplied = shouldApplyGrain;
+    const processingApplied = {
+        cropped,
+        grain_applied: grainApplied,
+        grain_rationale: curation.grainRationale || '',
+        vignette_level: effectiveVignetteLevel,
+        color_graded: true
+    };
+
     const result = {
         status: 'success',
         master_photographer: masterName,
@@ -605,6 +729,12 @@ async function processImage(buffer, metadata, context) {
         master_rationale: curation.masterRationale,
         composition_rule: safeCrop.rule,
         coordinates: safeCrop,
+        composition_assessment: {
+            quality: curation.compositionQuality,
+            crop_applied: cropped,
+            crop_rationale: curation.cropRationale
+        },
+        processing_applied: processingApplied,
         color_profile: profile.name,
         color_rationale: curation.colorRationale,
         lens_profile: lensName,
@@ -627,15 +757,28 @@ async function processImage(buffer, metadata, context) {
         narrativeParts.push(context.burstResult.rationale);
     }
     if (lang === 'en') {
-        narrativeParts.push(`Recomposed through the eye of ${masterName} (${masterStyle}).`);
-        if (safeCrop.rule) narrativeParts.push(safeCrop.rule);
+        if (cropped) {
+            narrativeParts.push(`Recomposed through the eye of ${masterName} (${masterStyle}).`);
+            if (safeCrop.rule) narrativeParts.push(safeCrop.rule);
+        } else {
+            const quality = curation.cropRationale || 'strength in its original framing';
+            narrativeParts.push(`Your composition captures ${quality}.`);
+        }
         narrativeParts.push(`Color grade: ${profile.name}.`);
-        narrativeParts.push(`Lens character: ${lensName}.`);
+        if (effectiveVignetteLevel !== 'none') {
+            narrativeParts.push(`Lens character: ${lensName}.`);
+        }
     } else {
-        narrativeParts.push(`${masterName} · ${masterStyle}`);
-        if (safeCrop.rule) narrativeParts.push(safeCrop.rule);
+        if (cropped) {
+            narrativeParts.push(`${masterName} · ${masterStyle}`);
+            if (safeCrop.rule) narrativeParts.push(safeCrop.rule);
+        } else {
+            narrativeParts.push(curation.cropRationale || masterName);
+        }
         narrativeParts.push(profile.name);
-        narrativeParts.push(lensName);
+        if (effectiveVignetteLevel !== 'none') {
+            narrativeParts.push(lensName);
+        }
     }
     result.presentation = narrativeParts.join('\n');
 

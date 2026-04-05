@@ -17,6 +17,7 @@ AgentLux does one thing and does it with absolute conviction: it transforms any 
 - **Only Leica.** Every color matrix, every vignette curve, every grain particle is calibrated to real Leica hardware: M10, M9 CCD, M Monochrom, M6 bodies; Summilux, Noctilux, Summicron, Elmarit glass.
 - **Only Masters.** Bresson's decisive geometry. Alex Webb's layered color. Fan Ho's chiaroscuro. Koudelka's panoramic austerity. Salgado's monumental humanity. Moriyama's raw provocation. The system picks the right eye for your image.
 - **Only Opinionated.** No sliders. No presets menu. No "which filter do you want?" The Curator Agent analyzes your image and makes every creative decision autonomously.
+- **Only Restrained.** A great curator knows when NOT to intervene. If your composition is already strong, it stays. If grain doesn't serve the image, it's skipped. Processing is proportional, never mechanical.
 
 ## Architecture
 
@@ -29,20 +30,24 @@ AgentLux does one thing and does it with absolute conviction: it transforms any 
                     │  · Master style  │     │  · Crop box      │
                     │  · Color profile │     │  · Composition   │
                     │  · Lens character│     │    rule narrative │
-                    └──────────────────┘     └────────┬─────────┘
-                                                      │
-                                                      ▼
-                                          ┌──────────────────────┐
-                                          │  Image Pipeline      │
-                                          │  (sharp, no AI)      │
+                    │                  │     │                  │
+                    │  Assesses:       │     │  OR: preserves   │
+                    │  · Composition   │     │  original frame   │
+                    │    quality       │     │  if excellent     │
+                    │  · Grain needed? │     └────────┬─────────┘
+                    │  · Vignette      │              │
+                    │    intensity     │              ▼
+                    │  · Processing    │  ┌──────────────────────┐
+                    │    intensity     │  │  Image Pipeline      │
+                    └──────────────────┘  │  (sharp, no AI)      │
                                           │                      │
-                                          │  · Precision crop    │
+                                          │  · Crop (if needed)  │
                                           │  · Leica color       │
-                                          │    science (recomb)  │
-                                          │  · Lens vignette +   │
-                                          │    micro-contrast    │
-                                          │  · Silver halide     │
-                                          │    film grain        │
+                                          │    science (always)  │
+                                          │  · Vignette          │
+                                          │    (if appropriate)  │
+                                          │  · Film grain        │
+                                          │    (if appropriate)  │
                                           └──────────┬───────────┘
                                                      │
                                                      ▼
@@ -50,7 +55,9 @@ AgentLux does one thing and does it with absolute conviction: it transforms any 
                                           │  Output              │
                                           │  · JPEG file or URI  │
                                           │  · presentation text │
-                                          │  · full metadata     │
+                                          │  · processing_applied│
+                                          │  · composition_      │
+                                          │    assessment        │
                                           └──────────────────────┘
 ```
 
@@ -113,6 +120,8 @@ if (result.status === 'success') {
 | `color_rationale` | `string` | Why this color grade |
 | `lens_profile` | `string` | e.g. `"Noctilux-M 50mm f/0.95 ASPH"` |
 | `lens_rationale` | `string` | Why this lens character |
+| `composition_assessment` | `object` | `{quality, crop_applied, crop_rationale}` — how the existing composition was evaluated. `quality`: `"excellent"` / `"good"` / `"fair"` / `"poor"` |
+| `processing_applied` | `object` | `{cropped, grain_applied, grain_rationale, vignette_level, color_graded}` — what processing was actually applied |
 | `burst_selection` | `object` | (Burst only) `{selected_index, total_images, rationale}` |
 | `source_file_deletion` | `string` | `"deleted"` / `"partial"` / `"delete_failed"` / `"disabled"` |
 

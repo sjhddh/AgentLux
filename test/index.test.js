@@ -601,6 +601,249 @@ test('burst mode partial deletion tracked correctly', async () => {
     }
 });
 
+// --- Aesthetic Intelligence: Composition Gate ---
+
+test('excellent composition + crop_recommended=false → identity crop and no "Recomposed" narrative', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath, 120, 80);
+
+    let fetchCalls = 0;
+    global.fetch = async () => {
+        fetchCalls += 1;
+        return mockOpenAIResponse({
+            master: 'bresson', color_profile: 'm10', lens: 'summilux_35',
+            master_rationale: 'Geometry', color_rationale: 'Natural', lens_rationale: 'Classic',
+            composition_quality: 'excellent', crop_recommended: false,
+            crop_rationale: 'Strong leading lines and balanced framing',
+            processing_intensity: 'moderate', grain_appropriate: false, vignette_intensity: 'subtle'
+        });
+    };
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(fetchCalls, 1, 'identity crop path should skip master VLM call');
+        assert.equal(result.coordinates.x, 0);
+        assert.equal(result.coordinates.y, 0);
+        assert.equal(result.coordinates.width, 120);
+        assert.equal(result.coordinates.height, 80);
+        assert.equal(result.composition_assessment.quality, 'excellent');
+        assert.equal(result.composition_assessment.crop_applied, false);
+        assert.ok(!result.presentation.includes('Recomposed'), 'preserved composition should not say Recomposed');
+        assert.ok(result.presentation.includes('Your composition captures'), 'should acknowledge original composition');
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+test('fair composition + crop_recommended=true → normal master crop', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath);
+    global.fetch = mockTwoPass(
+        { ...DEFAULT_CURATOR, composition_quality: 'fair', crop_recommended: true, processing_intensity: 'full', grain_appropriate: true, vignette_intensity: 'standard' },
+        { x: 10, y: 10, width: 60, height: 40, rule: 'Diagonal tension' }
+    );
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(result.composition_assessment.quality, 'fair');
+        assert.equal(result.composition_assessment.crop_applied, true);
+        assert.ok(result.presentation.includes('Recomposed'), 'cropped image should say Recomposed');
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+// --- Aesthetic Intelligence: Effects Override ---
+
+test('grain_appropriate=false skips grain even when profile has grain config', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath);
+    global.fetch = mockTwoPass(
+        { master: 'bresson', color_profile: 'm_monochrom', lens: 'summilux_35',
+          master_rationale: 'R', color_rationale: 'R', lens_rationale: 'R',
+          composition_quality: 'good', crop_recommended: true,
+          processing_intensity: 'moderate', grain_appropriate: false, vignette_intensity: 'standard' },
+        { x: 5, y: 5, width: 50, height: 30, rule: 'Chiaroscuro' }
+    );
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(result.processing_applied.grain_applied, false, 'grain should be skipped when grain_appropriate=false');
+        assert.equal(result.processing_applied.color_graded, true);
+        assert.equal(result.color_profile, 'Leica M Monochrom');
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+test('vignette_intensity="none" produces no vignette', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath);
+    global.fetch = mockTwoPass(
+        { ...DEFAULT_CURATOR, composition_quality: 'good', crop_recommended: true,
+          processing_intensity: 'moderate', grain_appropriate: false, vignette_intensity: 'none' },
+        { x: 5, y: 5, width: 50, height: 30, rule: 'Test' }
+    );
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(result.processing_applied.vignette_level, 'none');
+        assert.ok(!result.presentation.includes('Lens character'), 'no vignette → no lens character in narrative');
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+test('vignette_intensity="dramatic" scales vignette strength up', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath);
+    global.fetch = mockTwoPass(
+        { ...DEFAULT_CURATOR, composition_quality: 'fair', crop_recommended: true,
+          processing_intensity: 'full', grain_appropriate: true, vignette_intensity: 'dramatic' },
+        { x: 5, y: 5, width: 50, height: 30, rule: 'Drama' }
+    );
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(result.processing_applied.vignette_level, 'dramatic');
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+// --- Aesthetic Intelligence: Minimal Processing ---
+
+test('processing_intensity="minimal" applies only color grading', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath);
+    global.fetch = mockTwoPass(
+        { ...DEFAULT_CURATOR, composition_quality: 'good', crop_recommended: true,
+          processing_intensity: 'minimal', grain_appropriate: true, vignette_intensity: 'standard' },
+        { x: 5, y: 5, width: 50, height: 30, rule: 'Minimal test' }
+    );
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(result.processing_applied.grain_applied, false, 'minimal processing skips grain');
+        assert.equal(result.processing_applied.vignette_level, 'none', 'minimal processing forces vignette to none');
+        assert.equal(result.processing_applied.color_graded, true);
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+// --- Aesthetic Intelligence: Restraint Narrative ---
+
+test('restraint narrative in non-English for preserved composition', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath, 120, 80);
+
+    let fetchCalls = 0;
+    global.fetch = async () => {
+        fetchCalls += 1;
+        return mockOpenAIResponse({
+            master: 'fan_ho', color_profile: 'm_monochrom', lens: 'noctilux_50',
+            master_rationale: '光影几何', color_rationale: '极致黑白', lens_rationale: '梦幻散景',
+            composition_quality: 'excellent', crop_recommended: false,
+            crop_rationale: '构图已经很完美',
+            processing_intensity: 'moderate', grain_appropriate: false, vignette_intensity: 'subtle'
+        });
+    };
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, language: 'zh', delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(fetchCalls, 1);
+        assert.ok(!result.presentation.includes('Recomposed'), 'non-en preserved should not say Recomposed');
+        assert.ok(result.presentation.includes('构图已经很完美'), 'should include crop rationale in presentation');
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+test('processing_applied summary is correct for full processing path', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath);
+    global.fetch = mockTwoPass(
+        { master: 'moriyama', color_profile: 'm6_trix400', lens: 'elmarit_28',
+          master_rationale: 'Raw', color_rationale: 'Gritty', lens_rationale: 'Wide',
+          composition_quality: 'poor', crop_recommended: true,
+          processing_intensity: 'full', grain_appropriate: true, vignette_intensity: 'dramatic' },
+        { x: 10, y: 10, width: 50, height: 30, rule: 'Visceral crop' }
+    );
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(result.processing_applied.cropped, true);
+        assert.equal(result.processing_applied.grain_applied, true, 'full processing + grain profile should apply grain');
+        assert.equal(result.processing_applied.vignette_level, 'dramatic');
+        assert.equal(result.processing_applied.color_graded, true);
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+// --- Backward Compatibility with Aesthetic Intelligence ---
+
+test('legacy curator response (no new fields) produces full processing with defaults', async () => {
+    setup();
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentlux-'));
+    const imagePath = path.join(tmpDir, 'in.jpg');
+    await createFixtureImage(imagePath);
+    global.fetch = mockTwoPass(
+        { master: 'bresson', color_profile: 'm_monochrom', lens: 'summilux_35',
+          master_rationale: 'Geometry', color_rationale: 'Classic B&W', lens_rationale: 'Sharp' },
+        { x: 10, y: 10, width: 60, height: 40, rule: 'Golden ratio' }
+    );
+
+    try {
+        const result = await agentlux.execute({ image_path: imagePath, delete_after: false });
+        assert.equal(result.status, 'success');
+        assert.equal(result.composition_assessment.quality, 'fair', 'legacy default should be fair');
+        assert.equal(result.composition_assessment.crop_applied, true, 'legacy default should crop');
+        assert.equal(result.processing_applied.grain_applied, true, 'legacy default should apply grain from M Monochrom');
+        assert.equal(result.processing_applied.vignette_level, 'standard', 'legacy default vignette should be standard');
+        assert.equal(result.processing_applied.color_graded, true);
+        assert.ok(result.presentation.includes('Recomposed'), 'legacy path should behave as before');
+    } finally {
+        teardown();
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+});
+
+// --- Original tests continue ---
+
 test('error responses include recovery_hint for agent self-healing', async () => {
     setup();
     process.env.AGENTLUX_VLM_MAX_RETRIES = '0';

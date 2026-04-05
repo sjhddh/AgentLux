@@ -52,10 +52,12 @@ The output is a single JSON object. Check `result.status`:
 
 **On `"success"`:**
 - `result.output_path` — The absolute path to the processed JPEG. **Send this file to the user.**
-- `result.presentation` — A ready-to-use narrative explaining the creative decisions. **Show this text to the user.**
+- `result.presentation` — A ready-to-use narrative explaining the creative decisions. **Show this text to the user.** The narrative is proportional: if the original composition was preserved, it says so honestly rather than fabricating a crop story.
 - `result.master_photographer` — e.g. "Fan Ho"
 - `result.master_style` — e.g. "Light & Shadow Geometry"
 - `result.composition_rule` — e.g. "Diagonal shaft of light creates a natural leading line..."
+- `result.composition_assessment` — `{quality, crop_applied, crop_rationale}` — how the system evaluated the original composition. `quality` is `"excellent"`, `"good"`, `"fair"`, or `"poor"`. When `quality` is `"excellent"`, the original framing is preserved.
+- `result.processing_applied` — `{cropped, grain_applied, grain_rationale, vignette_level, color_graded}` — what was actually done to the image. Use this to understand the processing decisions.
 - `result.color_profile` — e.g. "Leica M Monochrom"
 - `result.lens_profile` — e.g. "Noctilux-M 50mm f/0.95 ASPH"
 - `result.coordinates` — The crop box applied `{x, y, width, height}`
@@ -120,7 +122,11 @@ The system will auto-select the strongest frame, then compose and color-grade it
 
 ## What This Skill Does (For Context)
 
-1. **Curator Agent** analyzes the image and selects the best-fit master photographer (Bresson, Alex Webb, Fan Ho, Koudelka, Salgado, Moriyama), Leica color profile (M10, M9, Monochrom, Tri-X, Portra), and lens character (Summilux, Noctilux, Summicron, Elmarit).
-2. **Master Agent** embodies the selected photographer and computes the optimal crop.
-3. **Image Pipeline** applies Leica color science, lens vignette + micro-contrast, and film grain.
-4. Result is returned with a `presentation` narrative ready to show the user.
+1. **Curator Agent** analyzes the image and makes all creative decisions in a single VLM pass:
+   - Selects the best-fit master photographer (Bresson, Alex Webb, Fan Ho, Koudelka, Salgado, Moriyama)
+   - Selects Leica color profile (M10, M9, Monochrom, Tri-X, Portra) and lens character (Summilux, Noctilux, Summicron, Elmarit)
+   - **Assesses composition quality** (`excellent` / `good` / `fair` / `poor`) — if the original composition is already strong, it is preserved
+   - **Decides effects intensity** — whether grain and vignette genuinely serve this image, or would feel like filters slapped on
+2. **Master Agent** embodies the selected photographer and computes the optimal crop. If the Curator assessed the composition as excellent, this step is skipped and the original framing is preserved.
+3. **Image Pipeline** applies Leica color science. Vignette and film grain are applied **conditionally** based on the Curator's aesthetic judgment — not mechanically.
+4. Result is returned with a `presentation` narrative ready to show the user. The narrative is honest: it describes what was actually done, not what could have been done.
